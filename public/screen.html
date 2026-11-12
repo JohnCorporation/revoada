@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Revoada — Telão</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden;background:#000;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#fff}
+  canvas{display:block;width:100vw;height:100vh;cursor:none}
+  #hud{position:fixed;top:18px;left:18px;right:18px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none}
+  #timer{font-size:56px;font-weight:900;text-shadow:0 4px 0 rgba(0,0,0,.3);min-width:120px}
+  #timer.hidden{visibility:hidden}
+  #board{background:rgba(10,20,45,.45);border-radius:16px;padding:12px 18px;min-width:240px;font-size:22px;backdrop-filter:blur(4px)}
+  #board h3{font-size:14px;letter-spacing:.12em;text-transform:uppercase;opacity:.75;margin-bottom:6px}
+  #board .row{display:flex;justify-content:space-between;gap:18px;padding:3px 0;font-weight:600}
+  .dot{display:inline-block;width:14px;height:14px;border-radius:50%;margin-right:8px;vertical-align:-1px}
+
+  /* Lobby: painel na parte de baixo, deixa o céu livre para treinar a mira */
+  #lobby{position:fixed;right:22px;bottom:22px;background:#fff;color:#14213d;border-radius:24px;padding:22px 28px;display:flex;gap:28px;align-items:center;box-shadow:0 18px 50px rgba(0,0,0,.35);max-width:min(640px,60vw)}
+  #lobby h1{font-size:40px;line-height:1;margin-bottom:8px;letter-spacing:-.02em}
+  #lobby p{font-size:17px;color:#3a4670;margin-bottom:4px}
+  #qr{width:180px;height:180px;border-radius:10px;background:#eef}
+  #url{font-family:ui-monospace,monospace;font-size:14px;color:#6a75a0;word-break:break-all;margin-top:6px}
+  #chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;min-height:30px}
+  .chip{padding:4px 12px;border-radius:999px;color:#fff;font-weight:700;font-size:16px}
+  button{font:inherit;font-size:24px;font-weight:800;padding:14px 30px;border:0;border-radius:14px;background:#ff5a36;color:#fff;cursor:pointer;margin-top:12px}
+  button:disabled{background:#c3c8d8;cursor:not-allowed}
+
+  #results{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(8,16,36,.6);backdrop-filter:blur(4px)}
+  #results .card{background:#fff;color:#14213d;border-radius:26px;padding:40px 56px;min-width:460px;box-shadow:0 20px 60px rgba(0,0,0,.4);text-align:center}
+  #results h2{font-size:52px;margin-bottom:20px}
+  #results ol{list-style:none;text-align:left;font-size:28px}
+  #results li{display:flex;justify-content:space-between;gap:30px;padding:8px 0;border-bottom:1px solid #e6e9f2;font-weight:700}
+  #results li:first-child{font-size:36px}
+  #results .next{margin-top:18px;color:#6a75a0;font-size:18px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <div id="timer" class="hidden">60</div>
+  <div id="board"><h3>Placar</h3><div id="rows"></div></div>
+</div>
+
+<div id="lobby">
+  <img id="qr" alt="QR code para entrar no jogo">
+  <div>
+    <h1>Revoada</h1>
+    <p>1. Escaneie o QR code com a câmera do celular</p>
+    <p>2. Aponte o celular para o telão e toque para atirar</p>
+    <p>Enquanto espera, treine a mira nos pássaros!</p>
+    <div id="url"></div>
+    <div id="chips"></div>
+    <button id="start" disabled>Aguardando jogadores…</button>
+  </div>
+</div>
+
+<div id="results"><div class="card"><h2>Fim de jogo!</h2><ol id="rank"></ol><div class="next" id="next"></div></div></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+(() => {
+  const ROUND = 60;          // duração da partida (s)
+  const RESULTS_TIME = 12;   // tempo na tela de resultados (s)
+
+  const socket = io();
+  socket.emit('screen');
+
+  const $ = (id) => document.getElementById(id);
+  const cv = $('c'), ctx = cv.getContext('2d');
+  let W, H;
+  function resize(){
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = innerWidth; H = innerHeight;
+    cv.width = W * dpr; cv.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  addEventListener('resize', resize); resize();
+
+  // Endereço que vai no QR (use ?url=https://seu-dominio para forçar)
+  const params = new URLSearchParams(location.search);
+  const base = (params.get('url') || location.origin).replace(/\/$/, '');
+  const joinUrl = base + '/c';
+  $('qr').src = '/qr?u=' + encodeURIComponent(joinUrl);
+  $('url').textContent = joinUrl;
+
+  // ---------- Estado ----------
+  const players = new Map();
+  let state = 'lobby', timeLeft = ROUND, resultsLeft = 0;
+  let birds = [], fx = [], clouds = [], spawnT = 0;
+  for (let i = 0; i < 6; i++) clouds.push({ x: Math.random(), y: .05 + Math.random() * .35, s: .6 + Math.random() * .8, v: .004 + Math.random() * .008 });
+
+  function addPlayer(p){
+    if (players.has(p.id)) return;
+    players.set(p.id, { ...p, x: .5, y: .5, tx: .5, ty: .5, score: 0, hits: 0, shots: 0, seen: performance.now() });
+    renderUI();
+  }
+  socket.on('players', (list) => list.forEach(addPlayer));
+  socket.on('playerJoined', addPlayer);
+  socket.on('playerLeft', (id) => { players.delete(id); renderUI(); });
+  socket.on('aim', (a) => { const p = players.get(a.id); if (p) { p.tx = clamp(a.x); p.ty = clamp(a.y); p.seen = performance.now(); } });
+  socket.on('shoot', (a) => { const p = players.get(a.id); if (p) { p.tx = clamp(a.x); p.ty = clamp(a.y); p.seen = performance.now(); shoot(p); } });
+
+  function clamp(v){ return Math.max(0, Math.min(1, +v || 0)); }
+
+  // ---------- Áudio ----------
+  let ac = null;
+  function unlockAudio(){
+    if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+    if (ac && ac.state === 'suspended') ac.resume();
+  }
+  addEventListener('pointerdown', unlockAudio);
+  function tone(f, d, delay = 0, type = 'square', vol = .1){
+    if (!ac) return;
+    const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime + delay;
+    o.type = type; o.frequency.value = f;
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.001, t + d);
+    o.connect(g).connect(ac.destination); o.start(t); o.stop(t + d);
+  }
+  const sfx = {
+    shot(){
+      if (!ac) return;
+      const n = Math.floor(ac.sampleRate * .14), buf = ac.createBuffer(1, n, ac.sampleRate), d = buf.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 3);
+      const s = ac.createBufferSource(), g = ac.createGain(); g.gain.value = .45;
+      s.buffer = buf; s.connect(g).connect(ac.destination); s.start();
+    },
+    hit(){ tone(660, .08); tone(990, .14, .07); },
+    gold(){ tone(880, .08); tone(1175, .08, .07); tone(1568, .2, .14); },
+    start(){ tone(440, .14); tone(660, .14, .15); tone(880, .3, .3); },
+    end(){ tone(880, .2); tone(660, .2, .2); tone(440, .45, .4); },
+    tick(){ tone(1200, .05, 0, 'sine', .08); }
+  };
+
+  // ---------- Fluxo da partida ----------
+  $('start').onclick = () => { unlockAudio(); startRound(); };
+
+  function startRound(){
+    if (!players.size) return;
+    for (const p of players.values()) { p.score = 0; p.hits = 0; p.shots = 0; }
+    birds = []; fx = []; spawnT = .5;
+    state = 'playing'; timeLeft = ROUND;
+    $('lobby').style.display = 'none';
+    $('results').style.display = 'none';
+    $('timer').classList.remove('hidden');
+    sfx.start();
+    socket.emit('state', { state: 'playing', duration: ROUND });
+    renderUI();
+  }
+
+  function endRound(){
+    state = 'over'; resultsLeft = RESULTS_TIME;
+    $('timer').classList.add('hidden');
+    const ranking = [...players.values()].sort((a, b) => b.score - a.score);
+    $('rank').innerHTML = ranking.map((p, i) =>
+      `<li><span>${i + 1}º <span class="dot" style="background:${p.color}"></span>${esc(p.name)}</span><span>${p.score}</span></li>`
+    ).join('') || '<li>Ninguém jogou :(</li>';
+    $('results').style.display = 'flex';
+    sfx.end();
+    socket.emit('state', { state: 'over', ranking: ranking.map((p, i) => ({ id: p.id, name: p.name, score: p.score, pos: i + 1 })) });
+  }
+
+  function toLobby(){
+    state = 'lobby';
+    $('results').style.display = 'none';
+    $('lobby').style.display = 'flex';
+    socket.emit('state', { state: 'lobby' });
+    renderUI();
+  }
+
+  function esc(s){ return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+  function renderUI(){
+    const list = [...players.values()].sort((a, b) => b.score - a.score);
+    $('rows').innerHTML = list.length
+      ? list.map((p) => `<div class="row"><span><span class="dot" style="background:${p.color}"></span>${esc(p.name)}</span><span>${p.score}</span></div>`).join('')
+      : '<div class="row" style="opacity:.7">Ninguém ainda</div>';
+    $('chips').innerHTML = list.map((p) => `<span class="chip" style="background:${p.color}">${esc(p.name)}</span>`).join('');
+    const b = $('start');
+    b.disabled = !players.size;
+    b.textContent = players.size ? `Começar partida (${players.size} jogador${players.size > 1 ? 'es' : ''})` : 'Aguardando jogadores…';
+  }
+  renderUI();
+
+  // ---------- Pássaros ----------
+  function spawn(){
+    const fromLeft = Math.random() < .5;
+    const golden = Math.random() < .08;
+    const progress = state === 'playing' ? (ROUND - timeLeft) / ROUND : 0;
+    const scale = W / 1280;
+    const size = (golden ? 24 : 28 + Math.random() * 12) * Math.max(.7, scale);
+    const speed = (golden ? 420 : 170 + Math.random() * 130) * scale * (state === 'playing' ? 1 + progress * .7 : .75);
+    const y = H * (.1 + Math.random() * .5);
+    birds.push({ x: fromLeft ? -80 : W + 80, y, baseY: y, vx: fromLeft ? speed : -speed, vy: 0,
+      amp: 15 + Math.random() * 60, freq: 1 + Math.random() * 2.2, ph: Math.random() * 6.28,
+      size, golden, state: 'fly', t: 0 });
+  }
+
+  function shoot(p){
+    const sx = p.tx * W, sy = p.ty * H;
+    p.shots++;
+    fx.push({ kind: 'ring', x: sx, y: sy, t: 0, color: p.color });
+    sfx.shot();
+    let best = null, bd = Infinity;
+    for (const b of birds) {
+      if (b.state !== 'fly') continue;
+      const d = Math.hypot(b.x - sx, b.y - sy);
+      if (d < b.size * 1.4 && d < bd) { bd = d; best = b; }   // área de acerto um pouco generosa
+    }
+    if (best) {
+      best.state = 'fall'; best.vy = -160; best.vx *= .25; best.t = 0;
+      const pts = best.golden ? 300 : 100;
+      const counts = state === 'playing';
+      if (counts) { p.score += pts; p.hits++; }
+      fx.push({ kind: 'text', x: best.x, y: best.y - 20, t: 0, color: p.color, text: counts ? '+' + pts : 'Boa!' });
+      fx.push({ kind: 'feathers', x: best.x, y: best.y, t: 0, golden: best.golden,
+        parts: Array.from({ length: 10 }, () => ({ a: Math.random() * 6.28, v: 80 + Math.random() * 160 })) });
+      best.golden ? sfx.gold() : sfx.hit();
+      socket.emit('result', { id: p.id, hit: true, points: counts ? pts : 0, score: p.score, golden: best.golden });
+      renderUI();
+    } else {
+      socket.emit('result', { id: p.id, hit: false, score: p.score });
+    }
+  }
+
+  // ---------- Desenho ----------
+  function drawBackground(t){
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#4fb3ff'); g.addColorStop(.75, '#bfe6ff'); g.addColorStop(1, '#e8f6ff');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    // sol
+    ctx.fillStyle = 'rgba(255,240,170,.9)';
+    ctx.beginPath(); ctx.arc(W * .82, H * .16, Math.min(W, H) * .07, 0, 7); ctx.fill();
+    // nuvens
+    ctx.fillStyle = 'rgba(255,255,255,.85)';
+    for (const c of clouds) {
+      const cx = ((c.x + t * c.v) % 1.3 - .15) * W, cy = c.y * H, s = 40 * c.s * (W / 1280);
+      ctx.beginPath();
+      ctx.arc(cx, cy, s, 0, 7); ctx.arc(cx + s, cy - s * .4, s * 1.1, 0, 7); ctx.arc(cx + s * 2.1, cy, s * .9, 0, 7);
+      ctx.fill();
+    }
+    // colinas
+    ctx.fillStyle = '#7fc66b';
+    ctx.beginPath(); ctx.moveTo(0, H * .78);
+    for (let x = 0; x <= W; x += 20) ctx.lineTo(x, H * .74 + Math.sin(x / W * 6) * H * .03);
+    ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.fill();
+  }
+
+  function drawForeground(){
+    // capim por cima dos pássaros que caem
+    ctx.fillStyle = '#3f9a3c'; ctx.fillRect(0, H * .86, W, H * .14);
+    ctx.fillStyle = '#4fb04a';
+    for (let x = -10; x < W + 20; x += 18) {
+      ctx.beginPath(); ctx.moveTo(x, H * .87); ctx.lineTo(x + 9, H * .80 - (x * 7 % 23)); ctx.lineTo(x + 18, H * .87); ctx.fill();
+    }
+  }
+
+  function drawBird(b){
+    const s = b.size;
+    ctx.save(); ctx.translate(b.x, b.y);
+    if (b.vx < 0) ctx.scale(-1, 1);
+    if (b.state === 'fall') ctx.rotate(Math.min(b.t * 9, Math.PI * 1.5));
+    const body = b.golden ? '#ffcc33' : '#8a5a33', belly = b.golden ? '#fff2a8' : '#e2c29b';
+    const wing = b.golden ? '#e0a100' : '#5c3b20', head = b.golden ? '#ffd84d' : '#2f7a46';
+    if (b.golden) { ctx.shadowColor = 'rgba(255,220,80,.9)'; ctx.shadowBlur = 20; }
+    // cauda
+    ctx.fillStyle = wing; ctx.beginPath(); ctx.moveTo(-s * .85, -s * .1); ctx.lineTo(-s * 1.4, -s * .4); ctx.lineTo(-s * 1.3, s * .15); ctx.closePath(); ctx.fill();
+    // corpo
+    ctx.fillStyle = body; ctx.beginPath(); ctx.ellipse(0, 0, s, s * .6, 0, 0, 7); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = belly; ctx.beginPath(); ctx.ellipse(-s * .05, s * .22, s * .62, s * .3, 0, 0, 7); ctx.fill();
+    // cabeça e bico
+    ctx.fillStyle = head; ctx.beginPath(); ctx.arc(s * .85, -s * .38, s * .4, 0, 7); ctx.fill();
+    ctx.fillStyle = '#ff9f1c'; ctx.beginPath(); ctx.moveTo(s * 1.18, -s * .44); ctx.lineTo(s * 1.6, -s * .3); ctx.lineTo(s * 1.18, -s * .2); ctx.closePath(); ctx.fill();
+    // olho
+    if (b.state === 'fall') {
+      ctx.strokeStyle = '#111'; ctx.lineWidth = 2; const ex = s * .97, ey = -s * .48, r = s * .1;
+      ctx.beginPath(); ctx.moveTo(ex - r, ey - r); ctx.lineTo(ex + r, ey + r); ctx.moveTo(ex + r, ey - r); ctx.lineTo(ex - r, ey + r); ctx.stroke();
+    } else {
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(s * .97, -s * .48, s * .11, 0, 7); ctx.fill();
+      ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(s * 1.0, -s * .48, s * .055, 0, 7); ctx.fill();
+    }
+    // asa batendo
+    const flap = b.state === 'fly' ? Math.sin(b.t * 16 + b.ph) * s * .95 : s * .2;
+    ctx.fillStyle = wing; ctx.beginPath(); ctx.moveTo(-s * .35, -s * .1); ctx.quadraticCurveTo(-s * .05, -s * .2 - flap, s * .35, -s * .1); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawCrosshair(p, now){
+    const x = p.x * W, y = p.y * H, r = 28;
+    const idle = now - p.seen > 4000;
+    ctx.save(); ctx.globalAlpha = idle ? .35 : 1;
+    ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,.35)';
+    ctx.beginPath(); ctx.arc(x + 2, y + 2, r, 0, 7); ctx.stroke();
+    ctx.strokeStyle = p.color;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x - r - 10, y); ctx.lineTo(x - r + 12, y); ctx.moveTo(x + r - 12, y); ctx.lineTo(x + r + 10, y);
+    ctx.moveTo(x, y - r - 10); ctx.lineTo(x, y - r + 12); ctx.moveTo(x, y + r - 12); ctx.lineTo(x, y + r + 10);
+    ctx.stroke();
+    ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(x, y, 4, 0, 7); ctx.fill();
+    ctx.font = '700 16px system-ui,sans-serif'; ctx.textAlign = 'center';
+    ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.strokeText(p.name, x, y + r + 28);
+    ctx.fillStyle = '#fff'; ctx.fillText(p.name, x, y + r + 28);
+    ctx.restore();
+  }
+
+  function drawFx(dt){
+    fx = fx.filter((f) => (f.t += dt) < (f.kind === 'text' ? .9 : f.kind === 'feathers' ? .7 : .3));
+    for (const f of fx) {
+      ctx.save();
+      if (f.kind === 'ring') {
+        ctx.globalAlpha = 1 - f.t / .3; ctx.strokeStyle = f.color; ctx.lineWidth = 5;
+        ctx.beginPath(); ctx.arc(f.x, f.y, 10 + f.t * 160, 0, 7); ctx.stroke();
+      } else if (f.kind === 'text') {
+        ctx.globalAlpha = 1 - f.t / .9; ctx.font = '900 34px system-ui,sans-serif'; ctx.textAlign = 'center';
+        ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(0,0,0,.4)'; ctx.strokeText(f.text, f.x, f.y - f.t * 70);
+        ctx.fillStyle = f.color; ctx.fillText(f.text, f.x, f.y - f.t * 70);
+      } else {
+        ctx.globalAlpha = 1 - f.t / .7; ctx.fillStyle = f.golden ? '#ffe066' : '#f3e2c7';
+        for (const q of f.parts) {
+          ctx.beginPath(); ctx.ellipse(f.x + Math.cos(q.a) * q.v * f.t, f.y + Math.sin(q.a) * q.v * f.t + 60 * f.t * f.t, 6, 3, q.a, 0, 7); ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
+  }
+
+  // ---------- Loop ----------
+  let last = performance.now(), lastTick = -1;
+  function loop(now){
+    const dt = Math.min((now - last) / 1000, .05); last = now;
+    const t = now / 1000;
+
+    if (state === 'playing') {
+      timeLeft -= dt;
+      const secs = Math.max(0, Math.ceil(timeLeft));
+      $('timer').textContent = secs;
+      if (secs <= 5 && secs !== lastTick && secs > 0) { lastTick = secs; sfx.tick(); }
+      if (timeLeft <= 0) endRound();
+    } else if (state === 'over') {
+      resultsLeft -= dt;
+      $('next').textContent = `Nova rodada em ${Math.max(0, Math.ceil(resultsLeft))}s`;
+      if (resultsLeft <= 0) toLobby();
+    }
+
+    // gerar pássaros
+    spawnT -= dt;
+    const maxBirds = state === 'playing' ? 7 : 3;
+    if (spawnT <= 0 && state !== 'over') {
+      if (birds.filter((b) => b.state === 'fly').length < maxBirds) spawn();
+      const progress = state === 'playing' ? (ROUND - timeLeft) / ROUND : 0;
+      spawnT = state === 'playing' ? .95 - progress * .45 : 1.8;
+    }
+
+    // mover pássaros
+    for (const b of birds) {
+      b.t += dt;
+      if (b.state === 'fly') { b.x += b.vx * dt; b.y = b.baseY + Math.sin(b.t * b.freq + b.ph) * b.amp; }
+      else { b.vy += 1100 * dt; b.y += b.vy * dt; b.x += b.vx * dt; }
+    }
+    birds = birds.filter((b) => b.y < H + 80 && b.x > -160 && b.x < W + 160);
+
+    // suavizar miras
+    const k = Math.min(1, dt * 18);
+    for (const p of players.values()) { p.x += (p.tx - p.x) * k; p.y += (p.ty - p.y) * k; }
+
+    drawBackground(t);
+    for (const b of birds) drawBird(b);
+    drawForeground();
+    drawFx(dt);
+    for (const p of players.values()) drawCrosshair(p, now);
+
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
