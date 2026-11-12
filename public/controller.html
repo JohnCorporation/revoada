@@ -2,39 +2,53 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#14213d">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <title>Revoada — Controle</title>
 <style>
-  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
   html,body{height:100%;overflow:hidden;background:#14213d;color:#fff;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;touch-action:none;overscroll-behavior:none}
-  .screen{position:fixed;inset:0;display:none;flex-direction:column;padding:16px;padding-bottom:max(16px,env(safe-area-inset-bottom))}
+  .screen{position:fixed;inset:0;display:none;padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left))}
   .screen.on{display:flex}
 
   /* Entrada */
-  #join{justify-content:center;gap:16px;text-align:center}
-  #join h1{font-size:44px;letter-spacing:-.02em}
-  #join p{opacity:.8;font-size:17px;line-height:1.4}
-  input{font:inherit;font-size:22px;padding:14px 16px;border-radius:14px;border:0;text-align:center;width:100%;user-select:text;-webkit-user-select:text}
-  .btn{font:inherit;font-size:22px;font-weight:800;padding:16px;border:0;border-radius:14px;background:#ff5a36;color:#fff;width:100%}
+  #join{flex-direction:column;justify-content:center;align-items:center;gap:14px;text-align:center}
+  #join > *{width:100%;max-width:420px}
+  #join h1{font-size:40px;letter-spacing:-.02em}
+  #join p{opacity:.85;font-size:16px;line-height:1.4}
+  input{font:inherit;font-size:22px;padding:13px 16px;border-radius:14px;border:0;text-align:center;user-select:text;-webkit-user-select:text}
+  .btn{font:inherit;font-size:22px;font-weight:800;padding:15px;border:0;border-radius:14px;background:#ff5a36;color:#fff}
   .err{color:#ffb3a3;font-size:15px;min-height:20px}
 
-  /* Jogo */
+  /* Jogo — retrato: coluna; paisagem (modo pistola): painel à esquerda + gatilho ocupando o resto */
+  #play{flex-direction:column;gap:10px}
+  #side{display:flex;flex-direction:column;gap:10px}
   #top{display:flex;justify-content:space-between;align-items:center;font-weight:800;font-size:20px}
-  #me{display:flex;align-items:center;gap:8px}
-  .dot{width:18px;height:18px;border-radius:50%}
+  #me{display:flex;align-items:center;gap:8px;min-width:0}
+  #myname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dot{width:16px;height:16px;border-radius:50%;flex:none}
   #score{font-size:26px}
-  #status{text-align:center;font-size:15px;opacity:.8;margin:8px 0;min-height:20px}
-  #preview{position:relative;align-self:center;width:62%;aspect-ratio:16/9;border:2px solid rgba(255,255,255,.35);border-radius:10px;background:rgba(255,255,255,.06);margin-bottom:10px}
-  #pdot{position:absolute;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;left:50%;top:50%}
-  #tools{display:flex;gap:10px;margin-bottom:12px}
-  #tools button{flex:1;font:inherit;font-size:15px;font-weight:700;padding:12px 8px;border-radius:12px;border:0;background:rgba(255,255,255,.14);color:#fff}
-  #tools button.on{background:rgba(255,255,255,.4)}
-  #fire{flex:1;border:0;border-radius:28px;font:inherit;font-size:42px;font-weight:900;color:#fff;letter-spacing:.04em;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;transition:transform .05s}
-  #fire small{font-size:15px;font-weight:600;opacity:.85;letter-spacing:0}
-  #fire.pressed{transform:scale(.97);filter:brightness(1.25)}
-  #flash{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .25s}
-  #msg{position:fixed;left:0;right:0;top:38%;text-align:center;font-size:52px;font-weight:900;pointer-events:none;opacity:0;transition:opacity .3s,transform .3s;text-shadow:0 4px 0 rgba(0,0,0,.3)}
+  #status{font-size:14px;opacity:.8;line-height:1.3}
+  #preview{position:relative;width:100%;aspect-ratio:16/9;border:2px solid rgba(255,255,255,.3);border-radius:10px;background:rgba(255,255,255,.06)}
+  #pdot{position:absolute;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;left:50%;top:50%}
+  #tools{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  #tools button{font:inherit;font-size:14px;font-weight:700;padding:11px 6px;border-radius:12px;border:0;background:rgba(255,255,255,.14);color:#fff}
+  #tools button.on{background:rgba(255,255,255,.42)}
+  #tools #center{grid-column:1/-1;font-size:16px}
+  #fire{flex:1;border:0;border-radius:26px;font:inherit;color:#fff;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;transition:transform .05s;min-height:120px}
+  #fire b{font-size:44px;font-weight:900;letter-spacing:.04em}
+  #fire small{font-size:14px;font-weight:600;opacity:.9;text-align:center;padding:0 12px}
+  #fire.pressed{transform:scale(.98);filter:brightness(1.25)}
+
+  @media (orientation: landscape){
+    #play{flex-direction:row}
+    #side{width:min(260px,38vw);overflow-y:auto}
+    #preview{display:none}
+  }
+
+  #flash{position:fixed;inset:0;pointer-events:none;opacity:0}
+  #msg{position:fixed;left:0;right:0;top:36%;text-align:center;font-size:50px;font-weight:900;pointer-events:none;opacity:0;transition:opacity .3s,transform .3s;text-shadow:0 4px 0 rgba(0,0,0,.3)}
   #msg.show{opacity:1;transform:translateY(-14px)}
 </style>
 </head>
@@ -42,22 +56,26 @@
 
 <section id="join" class="screen on">
   <h1>Revoada 🎯</h1>
-  <p>Seu celular é a mira. Aponte para o telão e toque no botão para atirar.</p>
+  <p>Segure o celular deitado, como uma pistola, com o topo apontando para o telão.</p>
   <input id="name" maxlength="12" placeholder="Seu nome" autocomplete="off">
   <button class="btn" id="go">Entrar no jogo</button>
   <div class="err" id="err"></div>
 </section>
 
 <section id="play" class="screen">
-  <div id="top"><div id="me"><span class="dot" id="mydot"></span><span id="myname"></span></div><div id="score">0</div></div>
-  <div id="status">Aponte o topo do celular para o telão e toque em “Centralizar”</div>
-  <div id="preview"><div id="pdot"></div></div>
-  <div id="tools">
-    <button id="center">🎯 Centralizar</button>
-    <button id="invx">⇆ Inverter</button>
-    <button id="invy">⇅ Inverter</button>
+  <div id="side">
+    <div id="top"><div id="me"><span class="dot" id="mydot"></span><span id="myname"></span></div><div id="score">0</div></div>
+    <div id="status">Aponte para o centro do telão e segure o gatilho por 1 segundo para centralizar.</div>
+    <div id="preview"><div id="pdot"></div></div>
+    <div id="tools">
+      <button id="center">🎯 Centralizar</button>
+      <button id="invx">⇆ Inverter</button>
+      <button id="invy">⇅ Inverter</button>
+      <button id="flick">💥 Tiro por tranco</button>
+      <button id="sens">Sensib.: média</button>
+    </div>
   </div>
-  <button id="fire">FOGO!<small id="hint">toque para atirar</small></button>
+  <button id="fire"><b>FOGO!</b><small id="hint">toque em qualquer lugar aqui para atirar</small></button>
 </section>
 
 <div id="flash"></div>
@@ -66,44 +84,76 @@
 <script src="/socket.io/socket.io.js"></script>
 <script>
 (() => {
-  // Quantos graus de giro atravessam a tela inteira (menor = mais sensível)
-  const RANGE_X = 45;
-  const RANGE_Y = 30;
+  // ---------- Configuração ----------
+  // Graus de giro para atravessar a tela inteira (menor = mais sensível)
+  const SENS = [
+    { name: 'baixa', x: 55, y: 34 },
+    { name: 'média', x: 40, y: 25 },
+    { name: 'alta',  x: 28, y: 17 },
+  ];
+  const SMOOTH = 0.45;        // 0..1 — maior = responde mais rápido, menor = mais estável
+  const DEADZONE = 0.15;      // graus — ignora tremidinhas mínimas
+  const FLICK_RATE = 320;     // graus/s de "tranco" para disparar
+  const FLICK_LOOKBACK = 140; // ms — usa a mira de antes do tranco
+  const HOLD_CENTER_MS = 800; // segurar o gatilho = centralizar
 
   const $ = (id) => document.getElementById(id);
-  const socket = io();
-  let me = null, x = .5, y = .5, tilt = 30;
-  let sensorOk = false, touchMode = false, lastSent = { x: -1, y: -1 }, lastSendT = 0;
+  const D = Math.PI / 180;
+  const clamp01 = (v) => Math.max(0, Math.min(1, v));
+  const wrap = (a) => ((a + 540) % 360) - 180;
   const store = { get(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }, set(k,v){ try { localStorage.setItem(k,v); } catch(e){} } };
-  let invX = store.get('invx') === '1', invY = store.get('invy') === '1';
-  $('invx').classList.toggle('on', invX); $('invy').classList.toggle('on', invY);
-  $('name').value = store.get('name') || '';
 
-  const clamp = (v) => Math.max(0, Math.min(1, v));
+  const socket = io();
+  let me = null;
+  let invX = store.get('invx') === '1', invY = store.get('invy') === '1', flickOn = store.get('flick') === '1';
+  let sensIdx = +(store.get('sens') ?? 1); if (!(sensIdx >= 0 && sensIdx < SENS.length)) sensIdx = 1;
+
+  // estado da mira
+  let x = .5, y = .5;                    // mira suavizada (0..1)
+  let head = 0, pitch = 0;               // ângulos atuais do "cano"
+  let head0 = null, pitch0 = 0;          // referência da calibração
+  let lastHead = null, lastPitch = null;
+  let sensorOk = false, touchMode = false;
+  const history = [];                    // [t, x, y] para o tiro por tranco
+
+  function refreshTools(){
+    $('invx').classList.toggle('on', invX);
+    $('invy').classList.toggle('on', invY);
+    $('flick').classList.toggle('on', flickOn);
+    $('sens').textContent = 'Sensib.: ' + SENS[sensIdx].name;
+  }
+  refreshTools();
+  $('name').value = store.get('name') || '';
 
   // ---------- Entrar ----------
   $('go').onclick = async () => {
     const name = $('name').value.trim();
     if (!name) { $('err').textContent = 'Digite seu nome 🙂'; return; }
     store.set('name', name);
+    if (!window.isSecureContext) $('err').textContent = 'Sensores só funcionam em HTTPS. Usando modo touchpad.';
 
-    if (!window.isSecureContext) {
-      $('err').textContent = 'Os sensores só funcionam em HTTPS. Usando modo touchpad.';
-    }
-    // iPhone: permissão precisa ser pedida dentro de um toque do usuário
+    // iPhone: a permissão precisa ser pedida dentro de um toque
     try {
-      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-        const r = await DeviceMotionEvent.requestPermission();
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        const r = await DeviceOrientationEvent.requestPermission();
         if (r !== 'granted') $('err').textContent = 'Sem permissão de movimento. Usando modo touchpad.';
       }
-      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        await DeviceOrientationEvent.requestPermission();
+      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+        await DeviceMotionEvent.requestPermission();
       }
     } catch (e) {}
 
+    // Android: tela cheia + travar em paisagem (iPhone ignora; o layout se adapta)
+    try {
+      if (document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen();
+        if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape');
+      }
+    } catch (e) {}
+    try { if (navigator.wakeLock) await navigator.wakeLock.request('screen'); } catch (e) {}
+
     startSensors();
     socket.emit('join', name);
-    try { if (navigator.wakeLock) await navigator.wakeLock.request('screen'); } catch (e) {}
     setTimeout(() => { if (!sensorOk) enableTouch(); }, 2000);
   };
 
@@ -113,63 +163,112 @@
     $('mydot').style.background = p.color; $('myname').textContent = p.name;
     $('fire').style.background = p.color; $('pdot').style.background = p.color;
   });
-
-  // Reconexão (ex.: celular bloqueou a tela): entra de novo com o mesmo nome
   socket.on('connect', () => { if (me) socket.emit('join', me.name); });
 
-  // ---------- Giroscópio ----------
+  // ---------- Sensores ----------
+  // Usa a orientação absoluta do aparelho (sem acumular erro):
+  // a direção do "cano" é o eixo do topo do celular (eixo Y do aparelho) levado para o mundo.
+  // Com R = Rz(alpha)·Rx(beta)·Ry(gamma), esse vetor é [-sin α cos β, cos α cos β, sin β].
+  // Funciona igual com o celular deitado como controle remoto ou de lado, como pistola,
+  // com a tela virada para qualquer um dos lados.
   function startSensors(){
-    addEventListener('deviceorientation', (e) => { if (e.beta != null) tilt = e.beta; });
-    let lt = 0;
-    addEventListener('devicemotion', (e) => {
-      const r = e.rotationRate;
-      if (!r || r.alpha == null) return;
-      const now = performance.now();
-      if (!lt) { lt = now; return; }
-      const dt = Math.min((now - lt) / 1000, .1); lt = now;
-      if (!sensorOk) { sensorOk = true; touchMode = false; }
-      // Giro horizontal no mundo: mistura eixo Z (celular deitado) e Y (celular em pé) conforme a inclinação
-      const b = Math.max(0, Math.min(90, tilt)) * Math.PI / 180;
-      const yaw = r.alpha * Math.cos(b) + r.gamma * Math.sin(b);
-      const pitch = r.beta;
-      x = clamp(x - (invX ? -1 : 1) * yaw * dt / RANGE_X);
-      y = clamp(y - (invY ? -1 : 1) * pitch * dt / RANGE_Y);
+    addEventListener('deviceorientation', (e) => {
+      if (e.alpha == null || e.beta == null) return;
+      if (!sensorOk) { sensorOk = true; touchMode = false; $('status').textContent = 'Aponte para o centro do telão e segure o gatilho por 1 segundo para centralizar.'; }
+      const a = e.alpha * D, b = e.beta * D;
+      const fx = -Math.sin(a) * Math.cos(b), fy = Math.cos(a) * Math.cos(b), fz = Math.sin(b);
+      let h = Math.atan2(fy, fx) / D;                                // direção horizontal (anti-horário)
+      let p = Math.asin(Math.max(-1, Math.min(1, fz))) / D;          // inclinação para cima/baixo
+      // zona morta contra tremedeira
+      if (lastHead !== null && Math.abs(wrap(h - lastHead)) < DEADZONE && Math.abs(p - lastPitch) < DEADZONE) return;
+      lastHead = h; lastPitch = p;
+      head = h; pitch = p;
+      if (head0 === null) recenter(false);                          // primeira leitura: começa no meio
+      updateAim();
     });
+
+    // tiro por tranco: um "coice" rápido do pulso dispara
+    addEventListener('devicemotion', (e) => {
+      if (!flickOn || !me) return;
+      const r = e.rotationRate; if (!r || r.alpha == null) return;
+      const mag = Math.hypot(r.alpha, r.beta, r.gamma);
+      if (mag > FLICK_RATE) {
+        const t = performance.now() - FLICK_LOOKBACK;
+        let past = history[history.length - 1] || [0, x, y];
+        for (let i = history.length - 1; i >= 0; i--) { if (history[i][0] <= t) { past = history[i]; break; } }
+        fire(past[1], past[2]);
+      }
+    });
+  }
+
+  function updateAim(){
+    const s = SENS[sensIdx];
+    const dh = wrap(head - head0), dp = pitch - pitch0;
+    const tx = clamp01(.5 - (invX ? -1 : 1) * dh / s.x);
+    const ty = clamp01(.5 - (invY ? -1 : 1) * dp / s.y);
+    x += (tx - x) * SMOOTH; y += (ty - y) * SMOOTH;
+    const now = performance.now();
+    history.push([now, x, y]);
+    while (history.length && now - history[0][0] > 600) history.shift();
+  }
+
+  function recenter(feedback = true){
+    head0 = head; pitch0 = pitch; x = .5; y = .5;
+    if (feedback) { buzz(40); show('Centralizado'); }
   }
 
   // ---------- Modo touchpad (sem sensor / teste no computador) ----------
   function enableTouch(){
     touchMode = true;
-    $('status').textContent = 'Sem giroscópio: arraste no quadro para mirar';
+    $('status').textContent = 'Sem sensor de movimento: arraste no quadro para mirar.';
+    $('preview').style.display = 'block';
     let px = null, py = null;
     const pv = $('preview');
     pv.addEventListener('pointerdown', (e) => { px = e.clientX; py = e.clientY; pv.setPointerCapture(e.pointerId); });
     pv.addEventListener('pointermove', (e) => {
       if (px == null) return;
       const rc = pv.getBoundingClientRect();
-      x = clamp(x + (e.clientX - px) / rc.width); y = clamp(y + (e.clientY - py) / rc.height);
+      x = clamp01(x + (e.clientX - px) / rc.width); y = clamp01(y + (e.clientY - py) / rc.height);
       px = e.clientX; py = e.clientY;
     });
     pv.addEventListener('pointerup', () => { px = py = null; });
   }
 
   // ---------- Botões ----------
-  $('center').onclick = () => { x = .5; y = .5; buzz(15); };
-  $('invx').onclick = () => { invX = !invX; store.set('invx', invX ? '1' : '0'); $('invx').classList.toggle('on', invX); };
-  $('invy').onclick = () => { invY = !invY; store.set('invy', invY ? '1' : '0'); $('invy').classList.toggle('on', invY); };
+  $('center').onclick = () => recenter();
+  $('invx').onclick = () => { invX = !invX; store.set('invx', invX ? '1' : '0'); refreshTools(); };
+  $('invy').onclick = () => { invY = !invY; store.set('invy', invY ? '1' : '0'); refreshTools(); };
+  $('flick').onclick = () => {
+    flickOn = !flickOn; store.set('flick', flickOn ? '1' : '0'); refreshTools();
+    $('hint').textContent = flickOn ? 'dê um tranco no pulso ou toque aqui para atirar' : 'toque em qualquer lugar aqui para atirar';
+  };
+  $('sens').onclick = () => { sensIdx = (sensIdx + 1) % SENS.length; store.set('sens', sensIdx); refreshTools(); };
 
-  const fire = $('fire');
-  let lastShot = 0;
-  fire.addEventListener('pointerdown', (e) => {
+  // Gatilho: toque = tiro; segurar = centralizar
+  const trig = $('fire');
+  let holdTimer = null;
+  trig.addEventListener('pointerdown', (e) => {
     e.preventDefault();
-    const now = performance.now();
-    if (now - lastShot < 220) return;     // limite de cadência
-    lastShot = now;
-    socket.emit('shoot', { x, y });
-    fire.classList.add('pressed'); buzz(25);
+    trig.classList.add('pressed');
+    fire(x, y);
+    clearTimeout(holdTimer);
+    holdTimer = setTimeout(() => recenter(), HOLD_CENTER_MS);
   });
-  const release = () => fire.classList.remove('pressed');
-  fire.addEventListener('pointerup', release); fire.addEventListener('pointercancel', release);
+  const release = () => { trig.classList.remove('pressed'); clearTimeout(holdTimer); };
+  trig.addEventListener('pointerup', release);
+  trig.addEventListener('pointercancel', release);
+  trig.addEventListener('pointerleave', release);
+  document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  let lastShot = 0;
+  function fire(fx, fy){
+    if (!me) return;
+    const now = performance.now();
+    if (now - lastShot < 250) return;   // limite de cadência
+    lastShot = now;
+    socket.emit('shoot', { x: fx, y: fy });
+    buzz(25);
+  }
 
   // ---------- Retorno do telão ----------
   socket.on('result', (r) => {
@@ -183,21 +282,17 @@
 
   socket.on('state', (st) => {
     if (!st) return;
-    if (st.state === 'playing') {
-      $('score').textContent = '0'; $('hint').textContent = 'valendo pontos!';
-      show('Valendo!'); buzz([60, 40, 60]);
-    } else if (st.state === 'over') {
-      const mine = (st.ranking || []).find((p) => me && p.id === socket.id);
-      $('hint').textContent = 'toque para treinar';
+    if (st.state === 'playing') { $('score').textContent = '0'; show('Valendo!'); buzz([60, 40, 60]); }
+    else if (st.state === 'over') {
+      const mine = (st.ranking || []).find((p) => p.id === socket.id);
       show(mine ? `${mine.pos}º lugar!` : 'Fim!');
-    } else {
-      $('hint').textContent = 'treino: toque para atirar';
     }
   });
 
   // ---------- Envio da mira (~30x por segundo, só quando muda) ----------
+  let lastSent = { x: -1, y: -1 }, lastSendT = 0;
   function sendLoop(now){
-    if (me && now - lastSendT > 33 && (Math.abs(x - lastSent.x) > .001 || Math.abs(y - lastSent.y) > .001)) {
+    if (me && now - lastSendT > 33 && (Math.abs(x - lastSent.x) > .0008 || Math.abs(y - lastSent.y) > .0008)) {
       socket.volatile.emit('aim', { x, y });
       lastSent = { x, y }; lastSendT = now;
     }
@@ -207,7 +302,7 @@
   requestAnimationFrame(sendLoop);
 
   // ---------- Efeitos ----------
-  function buzz(p){ try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) {} }  // iPhone ignora
+  function buzz(p){ try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) {} }
   function flash(c){ const f = $('flash'); f.style.background = c; f.style.transition = 'none'; f.style.opacity = .55; requestAnimationFrame(() => { f.style.transition = 'opacity .3s'; f.style.opacity = 0; }); }
   let msgT;
   function show(t){ const m = $('msg'); m.textContent = t; m.classList.add('show'); clearTimeout(msgT); msgT = setTimeout(() => m.classList.remove('show'), 900); }
